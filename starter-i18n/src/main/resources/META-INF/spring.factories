@@ -1,0 +1,6 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+    org.spring.i18n.autoconfigure.I18nAutoConfiguration,\
+    org.spring.i18n.autoconfigure.I18nMessageSourceConfiguration,\
+    org.spring.i18n.autoconfigure.I18nValidationConfiguration
+
+
