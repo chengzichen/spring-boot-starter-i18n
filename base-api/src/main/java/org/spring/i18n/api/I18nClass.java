@@ -1,4 +1,4 @@
-package org.spring.i18n.core;
+package org.spring.i18n.api;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

@@ -11,6 +11,7 @@
   <modules>
     <module>base-core</module>
     <module>starter-i18n</module>
+    <module>base-api</module>
   </modules>
 
   <properties>

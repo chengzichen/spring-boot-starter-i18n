@@ -61,6 +61,11 @@
       <groupId>org.hibernate.validator</groupId>
       <artifactId>hibernate-validator</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.spring.i18n</groupId>
+      <artifactId>base-api</artifactId>
+      <version>1.0.0</version>
+    </dependency>
   </dependencies>
 
 </project>
