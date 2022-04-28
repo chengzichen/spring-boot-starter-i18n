@@ -4,14 +4,10 @@ import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.core.util.StrUtil;
-import java.lang.reflect.Field;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.spring.i18n.api.I18nClass;
 import org.spring.i18n.api.I18nField;
+import org.spring.i18n.core.I18nOptions;
 import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.context.i18n.LocaleContextHolder;
@@ -25,6 +21,12 @@ import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
+
+import java.lang.reflect.Field;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * 利用 ResponseBodyAdvice 对返回结果进行国际化处理
@@ -78,8 +80,8 @@ public class I18nResponseAdvice implements ResponseBodyAdvice<Object> {
 
 	@Override
 	public Object beforeBodyWrite(Object body, MethodParameter returnType, MediaType selectedContentType,
-			Class<? extends HttpMessageConverter<?>> selectedConverterType, ServerHttpRequest request,
-			ServerHttpResponse response) {
+		Class<? extends HttpMessageConverter<?>> selectedConverterType, ServerHttpRequest request,
+		ServerHttpResponse response) {
 
 		try {
 			switchLanguage(body);
@@ -108,10 +110,9 @@ public class I18nResponseAdvice implements ResponseBodyAdvice<Object> {
 		if (i18nClass == null) {
 			return;
 		}
+
 		for (Field field : ReflectUtil.getFields(sourceClass)) {
 			Class<?> fieldType = field.getType();
-
-
 			Object fieldValue = ReflectUtil.getFieldValue(source, field);
 
 			if (fieldValue instanceof String) {
@@ -134,23 +135,24 @@ public class I18nResponseAdvice implements ResponseBodyAdvice<Object> {
 						continue;
 					}
 				}
+
+				// 获取国际化的唯一标识
+				String annotationCode = i18nField.code();
 				//是否指定code属性,通过code属性来获取值
-				if (StrUtil.isEmpty(i18nField.codeProperty())){
+				if (StrUtil.isEmpty(annotationCode) && StrUtil.isNotEmpty(i18nField.codeProperty())) {
 					Field codePropertyField = ReflectUtil.getField(sourceClass, i18nField.codeProperty());
-					if (codePropertyField!=null){
+					if (codePropertyField != null) {
 						fieldValue = ReflectUtil.getFieldValue(source, field);
 					}
 				}
-				// 获取国际化的唯一标识
-				String annotationCode = i18nField.code();
 				String code = StrUtil.isNotEmpty(annotationCode) ? annotationCode : (String) fieldValue;
 				if (StrUtil.isEmpty(code)) {
 					continue;
 				}
 				//给code添加固定的前缀
-				 String prefix = i18nField.prefix();
+				String prefix = i18nField.prefix();
 				if (!StrUtil.isEmpty(prefix)) {
-					code=prefix+code;
+					code = prefix + code;
 				}
 				// 把当前 field 的值更新为国际化后的属性
 				Locale locale = LocaleContextHolder.getLocale();
@@ -213,7 +215,7 @@ public class I18nResponseAdvice implements ResponseBodyAdvice<Object> {
 			}
 			catch (NoSuchMessageException e) {
 				log.warn("[codeToMessage]期望语言和回退语言中皆未找到对应的国际化配置，code: {}, local: {}, fallbackLocale：{}", code, locale,
-						fallbackLocale);
+					fallbackLocale);
 			}
 		}
 
