@@ -7,11 +7,12 @@ import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.spring.i18n.api.I18nClass;
 import org.spring.i18n.api.I18nField;
-import org.spring.i18n.core.I18nOptions;
+import org.spring.i18n.api.I18nSupport;
 import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.core.MethodParameter;
+import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
@@ -22,6 +23,7 @@ import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Field;
 import java.util.Collection;
 import java.util.HashMap;
@@ -68,20 +70,22 @@ public class I18nResponseAdvice implements ResponseBodyAdvice<Object> {
 	}
 
 	/**
-	 * supports all type
+	 * supports by @I18nSupport
 	 * @param returnType MethodParameter
 	 * @param converterType 消息转换器
-	 * @return always true
+	 * @return supports by @I18nSupport
 	 */
 	@Override
 	public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
-		return true;
+		AnnotatedElement annotatedElement = returnType.getAnnotatedElement();
+		I18nSupport i18nSupport = AnnotationUtils.findAnnotation(annotatedElement, I18nSupport.class);
+		return i18nSupport != null&&i18nSupport.support();
 	}
 
 	@Override
 	public Object beforeBodyWrite(Object body, MethodParameter returnType, MediaType selectedContentType,
-		Class<? extends HttpMessageConverter<?>> selectedConverterType, ServerHttpRequest request,
-		ServerHttpResponse response) {
+								  Class<? extends HttpMessageConverter<?>> selectedConverterType, ServerHttpRequest request,
+								  ServerHttpResponse response) {
 
 		try {
 			switchLanguage(body);
@@ -136,27 +140,15 @@ public class I18nResponseAdvice implements ResponseBodyAdvice<Object> {
 					}
 				}
 
-				// 获取国际化的唯一标识
-				String annotationCode = i18nField.code();
-				//是否指定code属性,通过code属性来获取值
-				if (StrUtil.isEmpty(annotationCode) && StrUtil.isNotEmpty(i18nField.codeProperty())) {
-					Field codePropertyField = ReflectUtil.getField(sourceClass, i18nField.codeProperty());
-					if (codePropertyField != null) {
-						fieldValue = ReflectUtil.getFieldValue(source, field);
-					}
-				}
-				String code = StrUtil.isNotEmpty(annotationCode) ? annotationCode : (String) fieldValue;
+				// 获取国际化标识
+				String code = parseMessageCode(source, (String) fieldValue, i18nField);
 				if (StrUtil.isEmpty(code)) {
 					continue;
 				}
-				//给code添加固定的前缀
-				String prefix = i18nField.prefix();
-				if (!StrUtil.isEmpty(prefix)) {
-					code = prefix + code;
-				}
+
 				// 把当前 field 的值更新为国际化后的属性
 				Locale locale = LocaleContextHolder.getLocale();
-				String message = codeToMessage(code, locale, fallbackLocale);
+				String message = codeToMessage(code, locale, (String) fieldValue, fallbackLocale);
 				ReflectUtil.setFieldValue(source, field, message);
 			}
 			else if (fieldValue instanceof Collection) {
@@ -188,22 +180,49 @@ public class I18nResponseAdvice implements ResponseBodyAdvice<Object> {
 	}
 
 	/**
+	 * <h2>使用（SpEL 表达式）获取国际化code
+	 * <p>
+	 * 先解析出来 code 值,如果SpEL表达式为空就使用当前属性值作为code
+	 * </p>
+	 * <br>
+	 * <ol>
+	 * @param source 源对象
+	 * @param fieldValue 属性值
+	 * @param i18nField 国际化注解
+	 * @return String 国际化 code
+	 */
+	private String parseMessageCode(Object source, String fieldValue, I18nField i18nField) {
+		String code;
+		String codeExpression = i18nField.code();
+		if (StrUtil.isNotEmpty(codeExpression)) {
+			Expression expression = EXPRESSION_CACHE.get(codeExpression);
+			if (expression == null) {
+				expression = PARSER.parseExpression(codeExpression);
+				EXPRESSION_CACHE.put(codeExpression, expression);
+			}
+			code = expression.getValue(source, String.class);
+		}
+		else {
+			code = fieldValue;
+		}
+		return code;
+	}
+
+	/**
 	 * 转换 code 为对应的国家的语言文本
 	 * @param code 国际化唯一标识
 	 * @param locale 当前地区
 	 * @param fallbackLocale 回退语言
 	 * @return 国际化 text，或者 code 本身
 	 */
-	private String codeToMessage(String code, Locale locale, Locale fallbackLocale) {
+	private String codeToMessage(String code, Locale locale, String defaultMessage, Locale fallbackLocale) {
 		String message;
 
-		NoSuchMessageException noSuchMessageException;
 		try {
 			message = messageSource.getMessage(code, null, locale);
 			return message;
 		}
 		catch (NoSuchMessageException e) {
-			noSuchMessageException = e;
 			log.warn("[codeToMessage]未找到对应的国际化配置，code: {}, local: {}", code, locale);
 		}
 
@@ -215,7 +234,7 @@ public class I18nResponseAdvice implements ResponseBodyAdvice<Object> {
 			}
 			catch (NoSuchMessageException e) {
 				log.warn("[codeToMessage]期望语言和回退语言中皆未找到对应的国际化配置，code: {}, local: {}, fallbackLocale：{}", code, locale,
-					fallbackLocale);
+						fallbackLocale);
 			}
 		}
 
@@ -223,7 +242,7 @@ public class I18nResponseAdvice implements ResponseBodyAdvice<Object> {
 			return code;
 		}
 		else {
-			throw noSuchMessageException;
+			return defaultMessage;
 		}
 	}
 
