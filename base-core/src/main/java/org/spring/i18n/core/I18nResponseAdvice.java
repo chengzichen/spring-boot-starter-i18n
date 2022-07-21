@@ -180,32 +180,26 @@ public class I18nResponseAdvice implements ResponseBodyAdvice<Object> {
 	}
 
 	/**
-	 * <h2>使用（SpEL 表达式）获取国际化code
-	 * <p>
-	 * 先解析出来 code 值,如果SpEL表达式为空就使用当前属性值作为code
-	 * </p>
-	 * <br>
-	 * <ol>
+	 * 解析获取国际化code
+	 * <ul>
+	 * <li>如果 @I18nField 注解中未指定 code 的 SpEL 表达式， 则使用当前属性值作为 code。
+	 * <li>否则使用该表达式解析出来的 code 值。
+	 * </ul>
 	 * @param source 源对象
 	 * @param fieldValue 属性值
 	 * @param i18nField 国际化注解
 	 * @return String 国际化 code
 	 */
 	private String parseMessageCode(Object source, String fieldValue, I18nField i18nField) {
-		String code;
+		// 如果没有指定 spel，则直接返回属性值
 		String codeExpression = i18nField.code();
-		if (StrUtil.isNotEmpty(codeExpression)) {
-			Expression expression = EXPRESSION_CACHE.get(codeExpression);
-			if (expression == null) {
-				expression = PARSER.parseExpression(codeExpression);
-				EXPRESSION_CACHE.put(codeExpression, expression);
-			}
-			code = expression.getValue(source, String.class);
+		if (StrUtil.isEmpty(codeExpression)) {
+			return fieldValue;
 		}
-		else {
-			code = fieldValue;
-		}
-		return code;
+
+		// 否则解析 spel
+		Expression expression = EXPRESSION_CACHE.computeIfAbsent(codeExpression, PARSER::parseExpression);
+		return expression.getValue(source, String.class);
 	}
 
 	/**
